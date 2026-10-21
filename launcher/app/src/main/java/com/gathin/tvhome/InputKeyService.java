@@ -64,6 +64,16 @@ public class InputKeyService extends AccessibilityService {
             String[] p = entry.split(":", 2);
             if (p.length == 2 && !p[0].trim().isEmpty()) appRedirects.put(p[0].trim(), p[1].trim());
         }
+        // The service is declared with no event types (keys only, nothing to deliver). app_redirects needs to see
+        // its source apps come to the front, so ask for window changes from those packages only, and only then.
+        if (!appRedirects.isEmpty()) {
+            android.accessibilityservice.AccessibilityServiceInfo info = getServiceInfo();
+            if (info != null) {
+                info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED;
+                info.packageNames = appRedirects.keySet().toArray(new String[0]);
+                setServiceInfo(info);
+            }
+        }
     }
 
     private boolean isInputKey(int keyCode) {
