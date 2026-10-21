@@ -23,6 +23,12 @@
 > [@gathint, 17 October 2026](https://x.com/gathint/status/2111379569030939102). The replies are where
 > most of the TV lists here came from. The repo was called tv-vibehack until the 19th; old links work.
 
+> **This fork** adds a home dashboard to the launcher: prayer times computed on the box, Hijri date, weather,
+> Home Assistant tiles (blinds with a position slider), a kids PIN on a quartz number pad, an adhan that wakes the
+> box, a photo screensaver and a home settings tile. See [docs/home-dashboard.md](docs/home-dashboard.md).
+>
+> ![Home dashboard](docs/home-dashboard/home.jpg)
+
 ## How it works
 
 Android TVs have the same debug bridge as Android phones. Switch on USB debugging in the TV's

@@ -15,6 +15,20 @@ android {
         versionName '2.5'
     }
 
+    // One launcher, one config per box: every folder src/<box>/ with its own res/values/config.xml becomes a build
+    // flavor (assemble<Box>Release) whose values override the main config.xml. Those folders are personal (Home
+    // Assistant address, devices, PIN, location) and git ignores them; without any, the build is the plain one.
+    def boxes = file('src').listFiles().findAll {
+        it.isDirectory() && !(it.name in ['main', 'test', 'androidTest', 'debug', 'release']) &&
+                !it.name.startsWith('test') && new File(it, 'res/values/config.xml').exists()
+    }.collect { it.name }.sort()
+    if (!boxes.isEmpty()) {
+        flavorDimensions 'device'
+        productFlavors {
+            boxes.each { box -> create(box) { dimension 'device' } }
+        }
+    }
+
     buildTypes {
         release {
             // R8 strips and optimises the code (AndroidX included): smaller APK, faster start on a slow TV CPU.

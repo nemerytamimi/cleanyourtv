@@ -196,4 +196,49 @@
          Live TV window does not keep the screen on (CVTE): there the system screensaver would start in the
          middle of a programme. Can also be set with "home_idle_clock_minutes": 10 in a theme's config.json. -->
     <integer name="home_idle_clock_minutes">0</integer>
+
+    <!-- ===== Home dashboard: weather, prayer times, Hijri date and Home Assistant tiles between the clock and the
+         dock (Dashboard.java). Off by default; per-box values belong in src/<box>/res/values/config.xml, which git
+         ignores (see docs/home-dashboard.md). When it is on, set dock_title to false: the dashboard takes that room. -->
+    <bool name="dashboard">false</bool>
+    <!-- Location for prayer times and weather (example: Makkah). -->
+    <string name="dash_lat" translatable="false">21.4225</string>
+    <string name="dash_lng" translatable="false">39.8262</string>
+    <string name="dash_place" translatable="false">مكة</string>
+    <!-- Prayer method angles (Muslim World League: 18 / 17) and per-prayer offsets in minutes for
+         Fajr, Sunrise, Dhuhr, Asr, Maghrib, Isha (match your local mosque or prayer app). -->
+    <string name="prayer_fajr_angle" translatable="false">18</string>
+    <string name="prayer_isha_angle" translatable="false">17</string>
+    <integer-array name="prayer_offsets">
+        <item>0</item><item>0</item><item>0</item><item>0</item><item>0</item><item>0</item>
+    </integer-array>
+    <!-- Hijri date (Umm al-Qura) next to the Gregorian date. -->
+    <bool name="hijri_date">true</bool>
+    <!-- Adhan at Fajr, Dhuhr, Asr, Maghrib and Isha: the audio file pushed to files/adhan.mp3, at most adhan_seconds;
+         wakes a sleeping box. -->
+    <bool name="adhan_enabled">false</bool>
+    <integer name="adhan_seconds">30</integer>
+    <!-- Home Assistant. The token is never in this file: push it to files/ha_token (docs/home-dashboard.md). -->
+    <string name="ha_url" translatable="false"></string>
+    <!-- Kids guard: a 4-digit PIN before a Home Assistant tile works, then not again for ha_pin_minutes. Empty: none.
+         Can also be changed on the TV (home settings tile). -->
+    <string name="ha_pin" translatable="false"></string>
+    <integer name="ha_pin_minutes">5</integer>
+    <!-- Tiles, in order. Each item: an entity id (light.kitchen), "domain:Friendly name", or "~text" for every entity
+         whose name contains text. Add "|Label" to rename. "@group" places the group tile. The home settings tile on
+         the TV can show and hide devices too. -->
+    <string-array name="ha_items" translatable="false">
+    </string-array>
+    <!-- The group tile: shows ha_group_sensor's value (comma list: the first that has one) and opens a panel with
+         ha_group_items. -->
+    <string name="ha_group_label" translatable="false"></string>
+    <string name="ha_group_sensor" translatable="false"></string>
+    <string-array name="ha_group_items" translatable="false">
+    </string-array>
+    <!-- "from.package:to.package": when from.package comes to the front, InputKeyService opens to.package instead
+         (for a remote button the firmware consumes and turns into an app launch). Needs InputKeyService on. -->
+    <string-array name="app_redirects" translatable="false">
+    </string-array>
+    <!-- The app RedirectActivity opens for a dead remote-button link (declare the activity in a box's manifest). -->
+    <string name="link_redirect_app" translatable="false"></string>
 </resources>

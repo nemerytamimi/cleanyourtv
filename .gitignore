@@ -14,3 +14,9 @@ backup/
 *.aab
 launcher/hs_err_pid*.log
 launcher/replay_pid*.log
+
+# Per-box launcher configs (Home Assistant address, devices, PIN, location): personal, never committed.
+# See docs/home-dashboard.md. Only the shared sources and tests are tracked.
+launcher/app/src/*
+!launcher/app/src/main/
+!launcher/app/src/test/

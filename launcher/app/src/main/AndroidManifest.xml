@@ -8,6 +8,18 @@
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Dashboard: weather (Open-Meteo) and Home Assistant buttons. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Adhan: an exact alarm at each prayer time, kept across reboots. -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- The adhan wakes a sleeping box. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Home settings: screensaver delay (WRITE_SETTINGS, allowed with appops) and sleep timer
+         (WRITE_SECURE_SETTINGS, granted over adb by build-and-install.sh). -->
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" />
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <!-- Needed since Android 10 to read the Wi-Fi network name for the network pill. Never requested at
          runtime: build-and-install grants it with pm grant, so lint's Android 12 "ask for COARSE with
@@ -141,6 +153,27 @@
             <meta-data
                 android:name="android.accessibilityservice"
                 android:resource="@xml/input_key_service" />
+        </service>
+            <!-- Adhan at prayer times. The system broadcasts below are protected, so no other app can send them. -->
+        <receiver
+            android:name=".Adhan"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
+            <!-- Screensaver: random photos with a clock (PhotoDream). -->
+        <service
+            android:name=".PhotoDream"
+            android:exported="true"
+            android:label="صور وساعة"
+            android:permission="android.permission.BIND_DREAM_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.dreams.DreamService" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
         </service>
     </application>
 </manifest>

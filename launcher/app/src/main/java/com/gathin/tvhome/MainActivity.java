@@ -88,7 +88,9 @@ import java.util.Set;
 /**
  * tvOS style home: black, a pinned dock row, an app grid, and one glass highlight that springs between tiles.
  */
-public class MainActivity extends Activity implements AppAdapter.TileListener {
+public class MainActivity extends Activity implements AppAdapter.TileListener, Dashboard.Host {
+    /** Weather, prayer times and Home Assistant buttons between the header and the dock; null when off. */
+    private Dashboard dashboard;
 
     private static final int LAUNCHER_SETTINGS_REQUEST = 42;
     /** Sent by QuickSettingsActivity: open Launcher settings from here so Home rebuilds when they close. */
@@ -376,6 +378,20 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         hiddenApps = new HashSet<>(cfg.hiddenApps);
 
         grid = findViewById(R.id.grid);
+        if (getResources().getBoolean(R.bool.dashboard)) {
+            // The dashboard draws its own greeting, clock and dates: the stock header gives way, and the pills
+            // move to the top line, level with the dashboard's greeting.
+            dashboard = new Dashboard(this, this);
+            findViewById(R.id.leftBlock).setVisibility(View.GONE);
+            View topButtons = findViewById(R.id.topButtons);
+            android.widget.RelativeLayout.LayoutParams tb =
+                    (android.widget.RelativeLayout.LayoutParams) topButtons.getLayoutParams();
+            tb.removeRule(android.widget.RelativeLayout.ALIGN_BOTTOM);
+            tb.addRule(android.widget.RelativeLayout.ALIGN_PARENT_TOP);
+            tb.bottomMargin = 0;
+            topButtons.setLayoutParams(tb);
+            dashboard.attach(root, (int) (26 * density), (int) (56 * density));
+        }
         rtlAppGrid = getResources().getBoolean(R.bool.rtl_app_grid);
         // Mirror only the app grid; the header and other locales keep their own layouts.
         grid.setLayoutManager(new GridLayoutManager(this, COLUMNS) {
@@ -476,6 +492,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         grid.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
             public void onScrolled(@NonNull RecyclerView rv, int dx, int dy) {
+                if (dashboard != null) {
+                    float off = rv.computeVerticalScrollOffset();
+                    dashboard.view.setAlpha(Math.max(0f, 1f - off / (90 * density)));
+                }
                 if (!glassShown) return;
                 glassTargetY -= dy;
                 glassScrollShift -= dy;
@@ -546,6 +566,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
             if (keyCode == KeyEvent.KEYCODE_DPAD_UP) return true;
             if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                // The Home Assistant buttons sit between the top bar and the dock.
+                if (dashboard != null && dashboard.focusFromBelow()) return true;
                 // Back to the dock tile Up came from, not wherever the focus finder lands.
                 focusTile(lastFocused % COLUMNS);
                 return true;
@@ -669,6 +691,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             updateInputsButton();
             pillsShown = true;
         }
+        if (dashboard != null) dashboard.onResume();
         if (showStats) startStats();
         sky.update();
         wallpaperPlayer.start();
@@ -787,6 +810,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         root.removeCallbacks(showIdleClock);
         endReorder();   // Home or another app while reordering keeps the order so far
         wallpaperPlayer.stop();
+        if (dashboard != null) dashboard.onPause();
         stopAmbientAnimation();
         hero.animate().cancel();
         ambient.animate().cancel();
@@ -848,6 +872,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     protected void onDestroy() {
         super.onDestroy();
         wallpaperPlayer.close();
+        if (dashboard != null) dashboard.destroy();
         ConnectivityManager cm = getSystemService(ConnectivityManager.class);
         TvInputManager tim = (TvInputManager) getSystemService(TV_INPUT_SERVICE);
         if (tim != null) tim.unregisterCallback(inputCallback);
@@ -863,6 +888,21 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
      * or switched off by a force-stop) the stock launcher that used to handle the key is gone, and the button did
      * nothing even on Home.
      */
+    private java.util.Map<Integer, String> homeAppKeys;
+
+    /**
+     * app_keys while Home has focus. Firmware that keeps resetting enabled_accessibility_services (the
+     * MBOX/Bigdroid NFX helper does on every app start) never lets InputKeyService stay bound, but keys it
+     * failed to route still reach the focused window, so the launcher can answer them itself.
+     */
+    private boolean handleAppKey(KeyEvent event) {
+        if (homeAppKeys == null) homeAppKeys = RemoteKeys.parseAppKeys(Config.load(this).appKeys);
+        String app = homeAppKeys.get(event.getKeyCode());
+        if (app == null) return false;
+        if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) RemoteKeys.launch(this, app);
+        return true;
+    }
+
     private boolean handleSettingsKey(KeyEvent event) {
         for (int code : settingsKeycodes) {
             if (event.getKeyCode() != code) continue;
@@ -890,6 +930,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (handleSettingsKey(event)) return true;
+        if (handleAppKey(event)) return true;
         if (!reordering) return super.dispatchKeyEvent(event);
         if (dockEditing) return dispatchDockEdit(event);
         boolean down = event.getAction() == KeyEvent.ACTION_DOWN;
@@ -1772,7 +1813,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                     rtlAppGrid, keyCode == KeyEvent.KEYCODE_DPAD_LEFT);
         }
         if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-            if (position < COLUMNS) return false;          // dock row: let focus move to the top bar
+            if (position < COLUMNS) {                       // dock row: the dashboard buttons, else the top bar
+                return dashboard != null && dashboard.focusFromBelow();
+            }
             target = position - COLUMNS;
         } else {
             int lastRowStart = ((count - 1) / COLUMNS) * COLUMNS;
@@ -1787,6 +1830,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         grid.playSoundEffect(keyCode == KeyEvent.KEYCODE_DPAD_UP
                 ? SoundEffectConstants.NAVIGATION_UP : SoundEffectConstants.NAVIGATION_DOWN);
         return true;
+    }
+
+    @Override public void focusDockFromDashboard() {
+        focusTile(Math.min(lastFocused % COLUMNS, Math.max(0, adapter.appCount() - 1)));
+    }
+
+    @Override public void focusTopBarFromDashboard() {
+        (btnInputs.getVisibility() == View.VISIBLE ? btnInputs : btnWifi).requestFocus();
     }
 
     @Override public void onLibraryFocused() {
@@ -1902,6 +1953,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private final Runnable clockCheck = this::updateClockVisibility;
 
     private void updateClockVisibility() {
+        if (dashboard != null) {            // the dashboard has its own clock; the stock header stays hidden
+            clockBlock.setVisibility(View.GONE);
+            return;
+        }
         boolean valid = System.currentTimeMillis() >= TIME_VALID_AFTER_MS;
         clockBlock.setVisibility(valid ? View.VISIBLE : View.INVISIBLE);
         handler.removeCallbacks(clockCheck);

@@ -3,9 +3,13 @@ package com.gathin.tvhome;
 import android.accessibilityservice.AccessibilityService;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
 import android.view.KeyEvent;
 import android.view.accessibility.AccessibilityEvent;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -23,6 +27,29 @@ public class InputKeyService extends AccessibilityService {
     private int[] inputKeycodes = new int[0];
     private Map<Integer, String> appKeys = Collections.emptyMap();
     private Map<Integer, String> appScancodes = Collections.emptyMap();
+    private final Map<String, String> appRedirects = new HashMap<>();
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private long lastRedirect;
+    private String pendingSource, pendingTarget;
+    private final Runnable redirect = () -> {
+        String source = pendingSource, target = pendingTarget;
+        if (source == null || target == null) return;
+        boolean again = SystemClock.elapsedRealtime() - lastRedirect < 4000;
+        if (inFront(source)) {
+            // Only ever Back/Home over the replaced app itself, never over the target or anything else.
+            performGlobalAction(GLOBAL_ACTION_BACK);
+            handler.postDelayed(() -> { if (inFront(source)) performGlobalAction(GLOBAL_ACTION_HOME); }, 200);
+        }
+        if (!again) {
+            lastRedirect = SystemClock.elapsedRealtime();
+            handler.postDelayed(() -> RemoteKeys.launch(this, target), 500);
+        }
+    };
+
+    private boolean inFront(String pkg) {
+        android.view.accessibility.AccessibilityNodeInfo root = getRootInActiveWindow();
+        return root != null && root.getPackageName() != null && pkg.contentEquals(root.getPackageName());
+    }
 
     @Override
     protected void onServiceConnected() {
@@ -32,6 +59,11 @@ public class InputKeyService extends AccessibilityService {
         inputKeycodes = config.inputKeycodes;
         appKeys = RemoteKeys.parseAppKeys(config.appKeys);
         appScancodes = RemoteKeys.parseAppScancodes(config.appKeys);
+        appRedirects.clear();
+        for (String entry : getResources().getStringArray(R.array.app_redirects)) {
+            String[] p = entry.split(":", 2);
+            if (p.length == 2 && !p[0].trim().isEmpty()) appRedirects.put(p[0].trim(), p[1].trim());
+        }
     }
 
     private boolean isInputKey(int keyCode) {
@@ -65,6 +97,20 @@ public class InputKeyService extends AccessibilityService {
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
+        // app_redirects: when a remote button's key never reaches us (the firmware consumes it and starts an app
+        // itself, as the Mi Box 4 does with TV and Live Channels), the app it starts is the signal. Go Home first,
+        // so Back from the target returns there and not to the app we replaced, then open the target.
+        if (appRedirects.isEmpty() || event.getEventType() != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+                || event.getPackageName() == null) return;
+        String target = appRedirects.get(event.getPackageName().toString());
+        if (target == null) return;
+        // The replaced app opens several windows in a row (Live Channels: TvActivity, MainActivity, a privacy screen),
+        // so act once they have stopped coming: close it with Back so nothing of it is left under the target, go
+        // Home, then open the target. If it comes back right after (Back from the target), only close it again.
+        pendingSource = event.getPackageName().toString();
+        pendingTarget = target;
+        handler.removeCallbacks(redirect);
+        handler.postDelayed(redirect, 500);
     }
 
     @Override
